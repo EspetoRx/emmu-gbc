@@ -1,0 +1,27 @@
+# Core oxGBC vendorado (somente os fontes de `crates/core`), adaptado para
+# fazer parte do workspace do Emmu. O código em `src/` é o upstream exato.
+[package]
+name = "oxgbc-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["troidem <mxmgorin@gmail.com>"]
+description = "Game Boy / Game Boy Color core vendored from oxGBC"
+license = "GPL-3.0-only"
+
+# Declarados apenas para manter os `#[cfg(feature = ...)]` do upstream sem
+# avisos do check-cfg. Não são ativados pelo Emmu.
+[features]
+default = []
+debug = []
+lazy-flags = []
+apu-trace = []
+test-bus = []
+per-tick-clock = []
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+crc = "3.4.0"
+log = "0.4.27"
+# Drop-in `Instant`/`SystemTime` que também funciona em wasm32.
+web-time = "1.1"

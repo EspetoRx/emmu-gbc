@@ -1,0 +1,180 @@
+use crate::ppu::lcd::PixelColor;
+use serde::{Deserialize, Serialize};
+
+const BUFFER_SIZE: usize = MAX_FIFO_SIZE * 2;
+const MAX_FIFO_SIZE: usize = 8;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PixelFifo {
+    buffer: [PixelColor; BUFFER_SIZE],
+    head: usize,
+    tail: usize,
+    size: usize,
+    popped: u8,
+    pushed: u8,
+}
+
+impl Default for PixelFifo {
+    fn default() -> Self {
+        Self {
+            buffer: [PixelColor::default(); BUFFER_SIZE],
+            head: 0,
+            tail: 0,
+            size: 0,
+            popped: 0,
+            pushed: 0,
+        }
+    }
+}
+
+impl PixelFifo {
+    #[inline(always)]
+    pub fn push(&mut self, pixel: PixelColor) {
+        // SAFETY:
+        // - we change tail only here and don't give any mut reference
+        unsafe {
+            *self.buffer.get_unchecked_mut(self.tail) = pixel;
+        }
+
+        self.tail = (self.tail + 1) % BUFFER_SIZE;
+        self.size += 1;
+        self.pushed += 1;
+    }
+
+    #[inline(always)]
+    pub fn pop(&mut self) -> Option<(PixelColor, u8)> {
+        if self.size > MAX_FIFO_SIZE {
+            let poped = self.popped;
+            self.popped += 1;
+            // SAFETY:
+            // - we change head only here and don't give any mut reference
+            // - buffer size is bigger than `MAX_FIFO_SIZE`
+            let pixel = unsafe { *self.buffer.get_unchecked(self.head) };
+            self.head = (self.head + 1) % BUFFER_SIZE;
+            self.size -= 1;
+
+            return Some((pixel, poped));
+        }
+
+        None
+    }
+
+    #[inline(always)]
+    pub const fn clear(&mut self) {
+        self.head = 0;
+        self.tail = 0;
+        self.size = 0;
+        self.popped = 0;
+        self.pushed = 0;
+    }
+
+    /// Drop the queued pixels but keep the line's stream position: the next
+    /// push takes the fifo index right after the last popped pixel, as if the
+    /// dropped in-flight pixels were never fetched. Used by the mid-line
+    /// window restart, where sprite mixing must stay in line coordinates.
+    #[inline(always)]
+    pub const fn restart(&mut self) {
+        self.tail = self.head;
+        self.size = 0;
+        self.pushed = self.popped;
+    }
+
+    #[inline(always)]
+    pub fn is_full(&self) -> bool {
+        self.size > MAX_FIFO_SIZE
+    }
+
+    #[inline(always)]
+    pub fn pushed_count(&self) -> u8 {
+        self.pushed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ppu::lcd::PixelColor;
+
+    fn create_pixel(v: u32) -> PixelColor {
+        PixelColor::new(v as u8, 0, 0)
+    }
+
+    #[test]
+    fn test_push_increases_size() {
+        let mut fifo = PixelFifo::default();
+        assert_eq!(fifo.size, 0);
+        fifo.push(create_pixel(1));
+        assert_eq!(fifo.size, 1);
+    }
+
+    #[test]
+    fn test_is_full_behavior() {
+        let mut fifo = PixelFifo::default();
+
+        // Fill until just before full
+        for i in 0..MAX_FIFO_SIZE {
+            fifo.push(create_pixel(i as u32));
+        }
+        assert!(
+            !fifo.is_full(),
+            "Should not be full when size == MAX_FIFO_SIZE"
+        );
+
+        // Push one more
+        fifo.push(create_pixel(255));
+        assert!(fifo.is_full(), "Should be full when size > MAX_FIFO_SIZE");
+    }
+
+    #[test]
+    fn test_pop_returns_none_when_not_full() {
+        let mut fifo = PixelFifo::default();
+        fifo.push(create_pixel(1));
+        // size <= MAX_FIFO_SIZE, so pop should return None
+        assert!(fifo.pop().is_none());
+    }
+
+    #[test]
+    fn test_pop_returns_pixels_in_fifo_order() {
+        let mut fifo = PixelFifo::default();
+
+        // Fill enough to exceed MAX_FIFO_SIZE
+        for i in 0..(MAX_FIFO_SIZE + 2) {
+            fifo.push(create_pixel(i as u32));
+        }
+
+        // Now pop should return the first pushed pixels
+        let p = fifo.pop();
+        assert!(p.is_some());
+        assert_eq!(p.unwrap().0, create_pixel(0));
+
+        let p2 = fifo.pop();
+        assert!(p2.is_some());
+        assert_eq!(p2.unwrap().0, create_pixel(1));
+    }
+
+    #[test]
+    fn test_clear_resets_state() {
+        let mut fifo = PixelFifo::default();
+        for i in 0..(MAX_FIFO_SIZE + 5) {
+            fifo.push(create_pixel(i as u32));
+        }
+        fifo.clear();
+        assert_eq!(fifo.size, 0);
+        assert!(!fifo.is_full());
+        assert!(fifo.pop().is_none());
+    }
+
+    #[test]
+    fn test_wrap_around_tail() {
+        let mut fifo = PixelFifo::default();
+
+        // Fill to exceed buffer size to test wrapping
+        for i in 0..(BUFFER_SIZE + 1) {
+            fifo.push(create_pixel(i as u32));
+        }
+
+        // Popping after wrap should still work correctly
+        while fifo.pop().is_some() {}
+        assert!(fifo.pop().is_none());
+    }
+}

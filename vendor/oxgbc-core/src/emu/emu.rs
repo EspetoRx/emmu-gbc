@@ -1,0 +1,233 @@
+use crate::apu::Apu;
+use crate::auxiliary::clock::Clock;
+use crate::auxiliary::io::Io;
+use crate::auxiliary::joypad::Joypad;
+use crate::bus::Bus;
+use crate::cart::Cart;
+use crate::cpu::Cpu;
+use crate::emu::config::EmuConfig;
+use crate::emu::runtime::{EmuRuntime, RunMode};
+use crate::emu::state::{EmuSaveState, EmuState};
+use crate::cart::header::CgbFlag;
+use crate::ppu::cgb_boot_palette::{self, DmgCompatPalette};
+use crate::ppu::framebuffer::FrameBuffer;
+use crate::ppu::lcd::Lcd;
+use crate::ppu::Ppu;
+use std::collections::VecDeque;
+use std::time::{Duration, Instant};
+use std::{mem, thread};
+
+pub trait EmuAudioCallback {
+    fn update(&mut self, output: &[f32], runtime: &EmuRuntime);
+}
+
+pub struct Emu {
+    pub config: EmuConfig,
+    pub state: EmuState,
+    pub runtime: EmuRuntime,
+    prev_speed_multiplier: f64,
+    rewind_buffer: VecDeque<EmuSaveState>,
+    last_rewind_frame: usize,
+}
+
+impl Emu {
+    pub fn new(config: EmuConfig, runtime: EmuRuntime) -> Result<Self, String> {
+        Ok(Self {
+            runtime,
+            prev_speed_multiplier: config.normal_speed,
+            state: EmuState::Running,
+            rewind_buffer: VecDeque::with_capacity(config.rewind_size),
+            last_rewind_frame: 0,
+            config,
+        })
+    }
+
+    #[inline(always)]
+    /// The authentic CGB boot-ROM colorization for the loaded cart, or `None`
+    /// when no monochrome cart is loaded (CGB games already provide color).
+    pub fn dmg_compat_palette(&self) -> Option<DmgCompatPalette> {
+        let bus = &self.runtime.cpu.clock.bus;
+        if bus.cart.is_empty() || bus.cart.data.cgb_flag != CgbFlag::DmgOnly {
+            return None;
+        }
+        Some(cgb_boot_palette::dmg_compat_palette(bus.cart.data.rom()))
+    }
+
+    pub fn get_framebuffer(&mut self) -> &mut FrameBuffer {
+        &mut self.runtime.cpu.clock.bus.io.ppu.lcd.buffer
+    }
+
+    #[inline(always)]
+    pub fn get_fps(&self) -> Option<f32> {
+        self.runtime.cpu.clock.bus.io.ppu.get_fps()
+    }
+
+    /// Runs emulation for one frame. Return whether the emulation is on time.
+    #[inline(always)]
+    pub fn run_frame(&mut self, callback: &mut impl EmuAudioCallback) -> bool {
+        match self.state {
+            EmuState::Rewind => {
+                if let Some(state) = self.rewind_buffer.pop_back() {
+                    self.load_save_state(state);
+                    thread::sleep(Duration::from_millis(250));
+                }
+
+                self.runtime.run_frame(callback);
+            }
+            EmuState::Running => {
+                self.runtime.run_frame(callback);
+                self.push_rewind();
+            }
+        };
+
+        let real_elapsed = self.runtime.cpu.clock.time.elapsed();
+        let emulated_time = self.calc_emulated_time();
+        let on_time = emulated_time >= real_elapsed;
+
+        if on_time {
+            self.sleep_spin(emulated_time - real_elapsed);
+        }
+
+        on_time
+    }
+
+    #[inline(always)]
+    fn sleep_spin(&self, duration: Duration) {
+        let start = Instant::now();
+
+        // Sleep to avoid overshooting
+        if duration > self.config.spin_duration {
+            thread::sleep(duration - self.config.spin_duration);
+        }
+
+        // Spin the rest to get close to the target duration. The window is
+        // wall-clock-bound either way; batching pauses between clock checks
+        // (~25k clock_gettime calls per frame otherwise) keeps the spin in
+        // `pause`, which is kinder to power and the SMT sibling, at a
+        // sub-microsecond precision cost.
+        while start.elapsed() < duration {
+            for _ in 0..16 {
+                std::hint::spin_loop();
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn calc_emulated_time(&mut self) -> Duration {
+        let speed_multiplier = match self.runtime.mode {
+            RunMode::Normal => self.config.normal_speed,
+            RunMode::Slow => self.config.slow_speed,
+            RunMode::Turbo => self.config.turbo_speed,
+        };
+
+        if self.prev_speed_multiplier != speed_multiplier {
+            self.runtime.cpu.clock.reset();
+        }
+
+        self.prev_speed_multiplier = speed_multiplier;
+
+        let emulated_duration_ns =
+            (self.runtime.cpu.clock.calc_elapsed_nanos() / speed_multiplier).round() as u64;
+
+        Duration::from_nanos(emulated_duration_ns)
+    }
+
+    #[inline(always)]
+    pub fn create_save_state(&mut self) -> EmuSaveState {
+        // The snapshot never needs the ROM image: load_save_state swaps the
+        // live one back in. Move it out for the clone so a snapshot doesn't
+        // copy (and the rewind buffer doesn't retain) megabytes of read-only
+        // ROM per entry.
+        let data = mem::take(&mut self.runtime.cpu.clock.bus.cart.data);
+        let state = EmuSaveState {
+            cpu: self.runtime.cpu.clone(),
+            cart_save_state: self.runtime.cpu.clock.bus.cart.create_save_state(),
+        };
+        self.runtime.cpu.clock.bus.cart.data = data;
+
+        state
+    }
+
+    #[inline(always)]
+    fn push_rewind(&mut self) {
+        if self.config.rewind_size > 0 {
+            let curr_frame = self.runtime.cpu.clock.bus.io.ppu.current_frame;
+            let diff = curr_frame.saturating_sub(self.last_rewind_frame);
+
+            if diff >= self.config.rewind_frames {
+                if self.rewind_buffer.len() > self.config.rewind_size {
+                    self.rewind_buffer.pop_front();
+                }
+
+                let state = self.create_save_state();
+                self.rewind_buffer.push_back(state);
+                self.last_rewind_frame = curr_frame;
+            }
+        }
+    }
+
+    pub fn load_cart(&mut self, cart: Cart) {
+        let dmg_palette = &self.runtime.cpu.clock.bus.io.ppu.lcd.dmg_palette;
+        let lcd = Lcd::new(
+            dmg_palette.base_colors(),
+            super::config::GbModel::default(),
+        );
+        let ppu = Ppu::new(lcd);
+        let apu = Apu::new(self.runtime.cpu.clock.bus.io.apu.config.clone());
+        let io = Io::new(ppu, apu);
+        let bus = Bus::new(cart, io, self.config.model);
+
+        let clock = Clock::new(bus);
+        self.runtime.cpu = Cpu::new(clock);
+
+        self.state = EmuState::Running;
+        self.runtime.cpu.clock.reset();
+        self.rewind_buffer.clear();
+    }
+
+    pub fn load_save_state(&mut self, mut save_state: EmuSaveState) {
+        // reconstruct cart
+        mem::swap(
+            &mut save_state.cpu.clock.bus.cart.data,
+            &mut self.runtime.cpu.clock.bus.cart.data,
+        );
+        let cart = save_state
+            .cart_save_state
+            .into_cart(save_state.cpu.clock.bus.cart.data);
+        save_state.cpu.clock.bus.cart = cart;
+        self.runtime.cpu = save_state.cpu;
+        self.runtime.cpu.clock.bus.io.joypad = Joypad::default(); // reset controls
+        self.runtime.cpu.clock.reset();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn new_emu() -> Emu {
+        // an all-zero 32 KiB image is a valid RomOnly header
+        let cart = Cart::new(vec![0u8; 0x8000].into_boxed_slice()).unwrap();
+        let bus = Bus::new(cart, Default::default(), None);
+
+        Emu::new(EmuConfig::default(), EmuRuntime::new(bus)).unwrap()
+    }
+
+    #[test]
+    fn test_save_state_skips_rom_and_load_restores_it() {
+        let mut emu = new_emu();
+
+        let state = emu.create_save_state();
+        // the snapshot must not carry the ROM image, the live cart keeps it
+        assert!(state.cpu.clock.bus.cart.is_empty());
+        assert_eq!(emu.runtime.cpu.clock.bus.cart.data.rom().len(), 0x8000);
+
+        let pc = emu.runtime.cpu.registers.pc;
+        emu.runtime.cpu.registers.pc = pc.wrapping_add(0x1234);
+        emu.load_save_state(state);
+
+        // loading swaps the live ROM back in and restores the CPU state
+        assert_eq!(emu.runtime.cpu.registers.pc, pc);
+        assert_eq!(emu.runtime.cpu.clock.bus.cart.data.rom().len(), 0x8000);
+    }
+}
