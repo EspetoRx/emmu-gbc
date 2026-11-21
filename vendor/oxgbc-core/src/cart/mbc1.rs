@@ -1,8 +1,8 @@
 use crate::cart::header::{RamSize, RomSize};
 use crate::cart::mbc::{Mbc, MbcData};
 use crate::cart::{CartData, ROM_BANK_SIZE};
-use serde::{Deserialize, Serialize};
 use crc::{Crc, CRC_32_ISO_HDLC};
+use serde::{Deserialize, Serialize};
 
 const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
 

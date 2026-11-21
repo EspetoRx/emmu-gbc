@@ -71,8 +71,7 @@ impl EnvelopeTimer {
 
         if value {
             self.clock = true;
-            self.should_lock =
-                (self.volume == 0xF && dir_up) || (self.volume == 0 && !dir_up);
+            self.should_lock = (self.volume == 0xF && dir_up) || (self.volume == 0 && !dir_up);
         } else {
             self.clock = false;
             self.locked |= self.should_lock;

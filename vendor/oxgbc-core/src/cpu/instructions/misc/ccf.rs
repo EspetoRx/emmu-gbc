@@ -7,4 +7,3 @@ impl Cpu {
         self.registers.flags.op_ccf(carry);
     }
 }
-

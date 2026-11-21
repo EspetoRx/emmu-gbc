@@ -10,4 +10,3 @@ impl Cpu {
         self.registers.flags.force_op_rra(lhs);
     }
 }
-

@@ -226,8 +226,11 @@ fn mooneye_probe(cpu: &Cpu) -> Option<TestOutcome> {
 
     if r.b == 3 && r.c == 5 && r.d == 8 && r.e == 13 && r.h == 21 && r.l == 34 {
         Some(TestOutcome::Pass)
-    } else if r.b == 0x42 && r.c == 0x42 && r.d == 0x42 && r.e == 0x42 && r.h == 0x42 && r.l == 0x42 {
-        Some(TestOutcome::Fail("mooneye failure register signature".to_string()))
+    } else if r.b == 0x42 && r.c == 0x42 && r.d == 0x42 && r.e == 0x42 && r.h == 0x42 && r.l == 0x42
+    {
+        Some(TestOutcome::Fail(
+            "mooneye failure register signature".to_string(),
+        ))
     } else {
         None
     }

@@ -282,7 +282,10 @@ mod tests {
     #[test]
     fn tables_are_self_consistent() {
         for &id in PALETTE_PER_CHECKSUM.iter() {
-            assert!((id as usize) < PALETTE_COMBINATIONS.len(), "combo id {id} OOB");
+            assert!(
+                (id as usize) < PALETTE_COMBINATIONS.len(),
+                "combo id {id} OOB"
+            );
         }
         for combo in PALETTE_COMBINATIONS.iter() {
             for &offset in combo.iter() {
@@ -290,6 +293,9 @@ mod tests {
                 assert!(end <= PALETTES.len(), "palette offset {offset} OOB");
             }
         }
-        assert_eq!(DUPLICATE_4TH_LETTERS.len(), TITLE_CHECKSUMS.len() - FIRST_DUPLICATE_INDEX);
+        assert_eq!(
+            DUPLICATE_4TH_LETTERS.len(),
+            TITLE_CHECKSUMS.len() - FIRST_DUPLICATE_INDEX
+        );
     }
 }

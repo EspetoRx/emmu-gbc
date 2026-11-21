@@ -3,12 +3,12 @@ use crate::auxiliary::clock::Clock;
 use crate::auxiliary::io::Io;
 use crate::auxiliary::joypad::Joypad;
 use crate::bus::Bus;
+use crate::cart::header::CgbFlag;
 use crate::cart::Cart;
 use crate::cpu::Cpu;
 use crate::emu::config::EmuConfig;
 use crate::emu::runtime::{EmuRuntime, RunMode};
 use crate::emu::state::{EmuSaveState, EmuState};
-use crate::cart::header::CgbFlag;
 use crate::ppu::cgb_boot_palette::{self, DmgCompatPalette};
 use crate::ppu::framebuffer::FrameBuffer;
 use crate::ppu::lcd::Lcd;
@@ -168,10 +168,7 @@ impl Emu {
 
     pub fn load_cart(&mut self, cart: Cart) {
         let dmg_palette = &self.runtime.cpu.clock.bus.io.ppu.lcd.dmg_palette;
-        let lcd = Lcd::new(
-            dmg_palette.base_colors(),
-            super::config::GbModel::default(),
-        );
+        let lcd = Lcd::new(dmg_palette.base_colors(), super::config::GbModel::default());
         let ppu = Ppu::new(lcd);
         let apu = Apu::new(self.runtime.cpu.clock.bus.io.apu.config.clone());
         let io = Io::new(ppu, apu);

@@ -87,8 +87,7 @@ impl Ppu {
 
             if self.lcd.ly < LCD_Y_RES {
                 self.lcd.oam_read_blocked = true;
-            } else if self.lcd.ly == LCD_Y_RES
-                && self.lcd.model == crate::emu::config::GbModel::Cgb
+            } else if self.lcd.ly == LCD_Y_RES && self.lcd.model == crate::emu::config::GbModel::Cgb
             {
                 // On CGB the line-144 OAM STAT pulse fires one M-cycle before
                 // the VBlank interrupt (mooneye vblank_stat_intr-C); on DMG

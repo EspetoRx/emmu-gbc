@@ -22,5 +22,4 @@ impl LcdWindow {
     pub fn is_visible(&self, lcd: &Lcd) -> bool {
         lcd.control.is_win_enabled() && self.x <= 166 && self.y < LCD_Y_RES
     }
-
 }

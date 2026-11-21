@@ -284,8 +284,7 @@ impl Apu {
                 let boundary = 1u32 << shift;
                 let into = v_first as u32 & (boundary - 1);
                 // edge-free iff the last tick's value stays below the boundary
-                let edge_free =
-                    into + (device_ticks as u32 - 1) * step as u32 + 1 <= boundary;
+                let edge_free = into + (device_ticks as u32 - 1) * step as u32 + 1 <= boundary;
 
                 if edge_free {
                     self.skip_ticks(device_ticks);

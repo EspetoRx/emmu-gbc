@@ -125,10 +125,9 @@ impl SweepTimer {
             let shift = self.nr10.individual_step();
 
             if shift != 0 {
-                let period = (self.addend
-                    + self.shadow_sample_length
-                    + self.nr10.direction_down() as u16)
-                    & 0x7FF;
+                let period =
+                    (self.addend + self.shadow_sample_length + self.nr10.direction_down() as u16)
+                        & 0x7FF;
                 nrx3x4.set_period(period);
             }
 
@@ -150,13 +149,7 @@ impl SweepTimer {
 
     /// NR10 write: glitches the in-flight calculation, overflow-checks the
     /// completed addend against the new negate bit, and may fire the sweep.
-    pub fn on_nr10_write(
-        &mut self,
-        value: u8,
-        nr52: &mut NR52,
-        nrx3x4: &mut NRx3x4,
-        lf_odd: bool,
-    ) {
+    pub fn on_nr10_write(&mut self, value: u8, nr52: &mut NR52, nrx3x4: &mut NRx3x4, lf_odd: bool) {
         if self.calculate_countdown != 0 || self.reload_timer != 0 {
             // Countdown just reloaded: re-reload it from the new shift.
             if self.reload_timer == 2 {

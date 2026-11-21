@@ -40,7 +40,7 @@ impl Cpu {
             None => {
                 self.clock.bus.io.interrupts.ime = false;
                 0x0000
-            },
+            }
         };
         self.clock.tick_m_cycles(1);
     }

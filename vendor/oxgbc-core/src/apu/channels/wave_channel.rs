@@ -77,9 +77,7 @@ impl WaveChannel {
             CH3_NR31_LENGTH_TIMER_ADDRESS => 0xFF, // write-only
             CH3_NR32_OUTPUT_LEVEL_ADDRESS => self.nrx2_output_level.read() | 0x9F,
             CH3_NR33_PERIOD_LOW_ADDRESS => 0xFF, // write-only
-            CH3_NR33_PERIOD_HIGH_CONTROL_ADDRESS => {
-                self.nrx3x4_period_and_ctrl.nrx4.read() | 0xBF
-            }
+            CH3_NR33_PERIOD_HIGH_CONTROL_ADDRESS => self.nrx3x4_period_and_ctrl.nrx4.read() | 0xBF,
             _ => panic!("Invalid WaveChannel address: {address:#X}"),
         }
     }

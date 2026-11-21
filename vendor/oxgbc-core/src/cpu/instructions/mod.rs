@@ -41,9 +41,7 @@ mod tests {
     #[test]
     pub fn test_m_cycles_ldh_f0() {
         let opcode = 0xF0;
-        let clock = Clock::new(
-            Bus::with_bytes(vec![0; 100000], Io::default()),
-        );
+        let clock = Clock::new(Bus::with_bytes(vec![0; 100000], Io::default()));
         let mut cpu = Cpu::new(clock);
         cpu.registers.pc = 0;
         cpu.clock.bus.write(0, opcode as u8);
@@ -54,9 +52,7 @@ mod tests {
 
     #[test]
     pub fn test_m_cycles_call() {
-        let clock = Clock::new(
-            Bus::with_bytes(vec![0; 100000], Io::default()),
-        );
+        let clock = Clock::new(Bus::with_bytes(vec![0; 100000], Io::default()));
         let mut cpu = Cpu::new(clock);
         for (opcode, instr) in INSTRUCTIONS.iter().enumerate() {
             if Mnemonic::Call != instr.get_mnemonic() {
@@ -79,9 +75,7 @@ mod tests {
 
     #[test]
     pub fn test_m_cycles_jp() {
-        let clock = Clock::new(
-            Bus::with_bytes(vec![0; 100000], Io::default()),
-        );
+        let clock = Clock::new(Bus::with_bytes(vec![0; 100000], Io::default()));
         let mut cpu = Cpu::new(clock);
         for (opcode, instr) in INSTRUCTIONS.iter().enumerate() {
             if Mnemonic::Jp != instr.get_mnemonic() {
@@ -108,9 +102,7 @@ mod tests {
 
     #[test]
     pub fn test_m_cycles_jr() {
-        let clock = Clock::new(
-            Bus::with_bytes(vec![0; 100000], Io::default()),
-        );
+        let clock = Clock::new(Bus::with_bytes(vec![0; 100000], Io::default()));
         let mut cpu = Cpu::new(clock);
         for (opcode, instr) in INSTRUCTIONS.iter().enumerate() {
             if Mnemonic::Jr != instr.get_mnemonic() {
@@ -133,9 +125,7 @@ mod tests {
 
     #[test]
     pub fn test_m_cycles_ret() {
-        let clock = Clock::new(
-            Bus::with_bytes(vec![0; 100000], Io::default()),
-        );
+        let clock = Clock::new(Bus::with_bytes(vec![0; 100000], Io::default()));
         let mut cpu = Cpu::new(clock);
         for (opcode, instr) in INSTRUCTIONS.iter().enumerate() {
             if Mnemonic::Ret != instr.get_mnemonic() {
@@ -158,9 +148,7 @@ mod tests {
 
     #[test]
     pub fn test_m_cycles() {
-        let clock = Clock::new(
-            Bus::with_bytes(vec![0; 100000], Io::default()),
-        );
+        let clock = Clock::new(Bus::with_bytes(vec![0; 100000], Io::default()));
         let mut cpu = Cpu::new(clock);
         for (opcode, instr) in INSTRUCTIONS.iter().enumerate() {
             match instr.get_mnemonic() {

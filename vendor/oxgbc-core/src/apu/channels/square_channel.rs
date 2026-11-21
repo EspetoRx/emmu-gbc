@@ -219,7 +219,13 @@ impl SquareChannel {
                 }
 
                 if nrx4.is_triggered() {
-                    self.trigger(master_ctrl, len_first_half, trigger_delay, lf_odd, old_period);
+                    self.trigger(
+                        master_ctrl,
+                        len_first_half,
+                        trigger_delay,
+                        lf_odd,
+                        old_period,
+                    );
                 }
             }
             _ => panic!("Invalid Square address: {:#X}", address),
@@ -353,9 +359,7 @@ impl SquareChannel {
         // CGB D/E retrigger glitches keyed on bit 10 of the countdown
         // relative to the last trigger delay.
         if !was_active {
-            if period_bit10_clear
-                && (counter.wrapping_sub(self.last_delay) / 4) & 0x400 == 0
-            {
+            if period_bit10_clear && (counter.wrapping_sub(self.last_delay) / 4) & 0x400 == 0 {
                 self.duty_sequence = (self.duty_sequence + 1) & 0x07;
                 force_unsuppressed = true;
             }
